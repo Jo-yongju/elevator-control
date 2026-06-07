@@ -1,17 +1,38 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Main program body
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
 #include "main.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
 #include "motor.h"
 #include "keypad.h"
 #include "display.h"
 #include "elevator.h"
+/* USER CODE END Includes */
 
+/* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim3;
 
+/* USER CODE BEGIN PV */
+static uint32_t lastKeyScan = 0;
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM3_Init(void);
 
+/* USER CODE BEGIN PFP */
+
 /* 키패드 문자를 층 호출로 해석한다.
-   1~5: 그대로, 6~9: 1~4층, 0: 5층 (원래 매핑 유지) */
+   1~5: 그대로, 6~9: 1~4층, 0: 5층 */
 static void handleKey(char key)
 {
     if (key >= '1' && key <= '5') {
@@ -22,22 +43,31 @@ static void handleKey(char key)
         Elevator_Request(5);
     }
 }
+/* USER CODE END PFP */
 
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
 int main(void)
 {
+    /* MCU Configuration--------------------------------------------------------*/
     HAL_Init();
     SystemClock_Config();
     MX_GPIO_Init();
     MX_TIM3_Init();
 
+    /* USER CODE BEGIN 2 */
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
 
     Motor_Init(&htim3, TIM_CHANNEL_2);
     Elevator_Init();
+    /* USER CODE END 2 */
 
-    uint32_t lastKeyScan = 0;
-
-    while (1) {
+    /* Infinite loop */
+    /* USER CODE BEGIN WHILE */
+    while (1)
+    {
         /* 키패드는 너무 자주 읽을 필요 없어 주기를 둔다. */
         if (HAL_GetTick() - lastKeyScan >= 50) {
             char key = Keypad_Scan();
@@ -53,11 +83,18 @@ int main(void)
 
         /* 현재 층을 계속 표시. */
         Display_ShowDigit(Elevator_CurrentFloor());
+
+        /* USER CODE END WHILE */
+
+        /* USER CODE BEGIN 3 */
     }
+    /* USER CODE END 3 */
 }
 
-/* --- 이하 클럭/주변장치 초기화 (CubeMX 생성부) --- */
-
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
 void SystemClock_Config(void)
 {
     RCC_OscInitTypeDef RCC_OscInitStruct = {0};
@@ -86,10 +123,21 @@ void SystemClock_Config(void)
     if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK) Error_Handler();
 }
 
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
 static void MX_TIM3_Init(void)
 {
+    /* USER CODE BEGIN TIM3_Init 0 */
+    /* USER CODE END TIM3_Init 0 */
+
     TIM_MasterConfigTypeDef sMasterConfig = {0};
     TIM_OC_InitTypeDef sConfigOC = {0};
+
+    /* USER CODE BEGIN TIM3_Init 1 */
+    /* USER CODE END TIM3_Init 1 */
 
     htim3.Instance = TIM3;
     htim3.Init.Prescaler = 169;
@@ -109,30 +157,39 @@ static void MX_TIM3_Init(void)
     sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
     if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) Error_Handler();
 
+    /* USER CODE BEGIN TIM3_Init 2 */
+    /* USER CODE END TIM3_Init 2 */
     HAL_TIM_MspPostInit(&htim3);
 }
 
+/**
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
 static void MX_GPIO_Init(void)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
 
+    /* GPIO Ports Clock Enable */
     __HAL_RCC_GPIOC_CLK_ENABLE();
     __HAL_RCC_GPIOF_CLK_ENABLE();
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
 
+    /*Configure GPIO pin Output Level */
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_4|GPIO_PIN_6
                             |GPIO_PIN_7|GPIO_PIN_10, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4|GPIO_PIN_5, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_3|GPIO_PIN_6, GPIO_PIN_RESET);
 
-    /* 홀 센서 입력 (Pull-up) */
+    /*Configure GPIO pins : 홀 센서 입력 (Pull-up) */
     GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_6|GPIO_PIN_10;
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-    /* 세그먼트 출력 (PA) */
+    /*Configure GPIO pins : 세그먼트 출력 (PA) */
     GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_4|GPIO_PIN_6
                         |GPIO_PIN_7|GPIO_PIN_10;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -140,39 +197,54 @@ static void MX_GPIO_Init(void)
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-    /* 키패드 Row 출력 (PC) */
+    /*Configure GPIO pins : 키패드 Row 출력 (PC) */
     GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-    /* 세그먼트 출력 (PB) */
+    /*Configure GPIO pins : 세그먼트 출력 (PB) */
     GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_3|GPIO_PIN_6;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-    /* 키패드 Col 입력 (PB, Pull-up) */
+    /*Configure GPIO pins : 키패드 Col 입력 (PB, Pull-up) */
     GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_4|GPIO_PIN_5;
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-    /* 키패드 Col 입력 (PA, Pull-up) */
+    /*Configure GPIO pins : 키패드 Col 입력 (PA, Pull-up) */
     GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 }
 
+/* USER CODE BEGIN 4 */
+/* USER CODE END 4 */
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
 void Error_Handler(void)
 {
+    /* USER CODE BEGIN Error_Handler_Debug */
     __disable_irq();
-    while (1) {}
+    while (1)
+    {
+    }
+    /* USER CODE END Error_Handler_Debug */
 }
 
 #ifdef USE_FULL_ASSERT
-void assert_failed(uint8_t *file, uint32_t line) {}
-#endif
+void assert_failed(uint8_t *file, uint32_t line)
+{
+    /* USER CODE BEGIN 6 */
+    /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */
