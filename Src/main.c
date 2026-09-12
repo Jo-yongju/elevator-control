@@ -75,7 +75,7 @@ int main(void)
             lastKeyScan = HAL_GetTick();
         }
 
-        /* 상태 머신을 한 단계 굴린다. (블로킹 없음) */
+        /* 상태 머신을 한 단계 갱신한다. */
         Elevator_Update();
 
         /* 모터 펄스를 목표 쪽으로 한 스텝 가/감속. (오픈루프) */
@@ -181,7 +181,8 @@ static void MX_GPIO_Init(void)
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_4|GPIO_PIN_6
                             |GPIO_PIN_7|GPIO_PIN_10, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4|GPIO_PIN_5, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_3|GPIO_PIN_6, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_3|GPIO_PIN_6|GPIO_PIN_8
+                            |GPIO_PIN_9, GPIO_PIN_RESET);
 
     /*Configure GPIO pins : 홀 센서 입력 (Pull-up) */
     GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_6|GPIO_PIN_10;
@@ -189,7 +190,7 @@ static void MX_GPIO_Init(void)
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-    /*Configure GPIO pins : 세그먼트 출력 (PA) */
+    /*Configure GPIO pins : 세그먼트 출력 및 키패드 Row (PA) */
     GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_4|GPIO_PIN_6
                         |GPIO_PIN_7|GPIO_PIN_10;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -204,8 +205,9 @@ static void MX_GPIO_Init(void)
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-    /*Configure GPIO pins : 세그먼트 출력 (PB) */
-    GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_3|GPIO_PIN_6;
+    /*Configure GPIO pins : 세그먼트 출력 및 키패드 Row (PB) */
+    GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_3|GPIO_PIN_6|GPIO_PIN_8
+                        |GPIO_PIN_9;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -217,7 +219,7 @@ static void MX_GPIO_Init(void)
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-    /*Configure GPIO pins : 키패드 Col 입력 (PA, Pull-up) */
+    /*Configure GPIO pins : 키패드 Col + Hall 입력 (PA, Pull-up) */
     GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
