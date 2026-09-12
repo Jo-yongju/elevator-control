@@ -20,7 +20,10 @@ STM32G474와 FS90R 연속회전 서보모터로 구현한 5층 엘리베이터 �
 ## Software Structure
 
 ```text
+elevator_control.ioc   STM32CubeMX peripheral / GPIO configuration
+
 Inc/
+  main.h
   elevator.h
   motor.h
   hall_sensor.h
@@ -28,12 +31,13 @@ Inc/
   display.h
 
 Src/
-  elevator.c      FSM / scheduling / safety state
-  motor.c         PWM / open-loop ramp
-  hall_sensor.c   floor detection / debounce
-  keypad.c        keypad scan
-  display.c       7-segment output
-  main.c          HAL initialization / main loop
+  main.c               HAL initialization / main loop
+  stm32g4xx_hal_msp.c  TIM3 / GPIO peripheral initialization
+  elevator.c           FSM / scheduling / safety state
+  motor.c              PWM / open-loop ramp
+  hall_sensor.c        floor detection / debounce
+  keypad.c             keypad scan
+  display.c            7-segment output
 ```
 
 하드웨어 접근 코드와 운행 판단 로직을 분리했다. `elevator.c`는 GPIO나 PWM pulse 값을 직접 다루지 않고 `Motor_SetDir()`과 `Hall_DetectFloor()` 같은 의미 단위 인터페이스를 사용한다.
