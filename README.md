@@ -1,107 +1,123 @@
-# elevator-control
+# Elevator Control System
 
-STM32와 FS90R 연속회전 서보모터로 만든 5층 엘리베이터 제어 시스템이다.
-처음에는 main.c 한 파일에 모든 로직을 넣어 동작만 시켰고, 이후 구조를
-모듈로 나누고 상태 머신으로 다시 설계하면서 SCAN 스케줄링, 가감속,
-안전 로직을 추가했다.
+STM32G474와 FS90R 연속회전 서보모터로 구현한 5층 엘리베이터 제어 시스템이다.
+초기 단일 `main.c` 중심 구현을 기능별 모듈과 FSM 구조로 정리하고, 진행 방향을 고려한 SCAN 방식 호출 처리, Hall Sensor 기반 층 감지, 오픈루프 가감속, 안전 상태 처리를 적용했다.
 
 ## 데모
-<img width="1242" height="870" alt="image" src="https://github.com/user-attachments/assets/8fa15b45-41a0-44ab-a6f0-1d84a381d610" />
 
-박스로 5층 통로를 만들고 층마다 홀 센서를 부착, 서보 모터로 카를 구동한 프로토타입이다 
+<img width="1242" height="870" alt="5-floor elevator prototype" src="https://github.com/user-attachments/assets/8fa15b45-41a0-44ab-a6f0-1d84a381d610" />
 
-## 하드웨어
+5층 통로 모형에 층별 Hall Sensor를 배치하고 FS90R 연속회전 서보모터로 카를 구동한 프로토타입이다.
 
-- MCU: STM32 (HAL)
-- 구동: FS90R 연속회전 서보모터 (PWM 제어)
-- 위치 감지: 층별 홀 센서 5개
-- 입력: 4x4 키패드
-- 표시: 7-세그먼트 디스플레이
+## Hardware
 
-## 파일 구조
+- MCU: STM32G474 (HAL)
+- Drive: FS90R continuous-rotation servo, 50 Hz PWM
+- Position sensing: Hall Sensor ×5
+- Input: 4×4 Keypad
+- Display: 7-Segment
 
+## Software Structure
+
+```text
+Inc/
+  elevator.h
+  motor.h
+  hall_sensor.h
+  keypad.h
+  display.h
+
+Src/
+  elevator.c      FSM / scheduling / safety state
+  motor.c         PWM / open-loop ramp
+  hall_sensor.c   floor detection / debounce
+  keypad.c        keypad scan
+  display.c       7-segment output
+  main.c          HAL initialization / main loop
 ```
-Inc/   motor.h  keypad.h  display.h  hall_sensor.h  elevator.h
-Src/   motor.c  keypad.c  display.c  hall_sensor.c  elevator.c  main.c
+
+하드웨어 접근 코드와 운행 판단 로직을 분리했다. `elevator.c`는 GPIO나 PWM pulse 값을 직접 다루지 않고 `Motor_SetDir()`과 `Hall_DetectFloor()` 같은 의미 단위 인터페이스를 사용한다.
+
+## Implementation
+
+### FSM 기반 운행 제어
+
+초기 구현은 이동 처리가 긴 `while` 루프를 점유해 운행, 도어 상태, 안전 처리가 하나의 제어 흐름에 결합되어 있었다.
+이를 다음 5개 상태로 분리했다.
+
+```text
+IDLE
+MOVING
+DOOR_OPEN
+DOOR_CLOSING
+FAULT
 ```
 
-하드웨어를 직접 다루는 코드(motor, keypad, display, hall_sensor)와 판단
-로직(elevator)을 분리했다. elevator는 핀 번호나 PWM 값 같은 하드웨어
-세부사항을 알지 못하고, Motor_SetDir(MOTOR_UP)처럼 의미 단위의 명령만
-사용한다. 덕분에 배선이나 모터가 바뀌어도 판단 로직은 건드릴 필요가 없다.
+`Elevator_Update()`는 호출될 때마다 현재 상태에 필요한 처리만 수행하고 반환한다. 메인 루프에서는 키패드 입력, FSM 갱신, 모터 ramp 갱신, 표시 출력을 반복 처리한다.
 
-## 구현
+### SCAN 방식 호출 스케줄링
 
-### 상태 머신
+초기 구현은 `floor_requests[]`를 낮은 층부터 순차 탐색해 다음 목표 층을 선택했기 때문에 현재 이동 방향을 고려하지 못했다.
 
-처음 코드는 이동 처리가 while 루프 안에 또 다른 while로 들어가 있어서,
-이동하는 동안에는 키 입력을 받지 못했다. 이를 5개 상태(IDLE, MOVING,
-DOOR_OPEN, DOOR_CLOSING, FAULT)로 나누고, Elevator_Update()가 매 루프마다
-현재 상태에 맞는 처리를 한 단계만 하고 빠져나오도록 바꿨다. 멈추는 지점이
-없어 이동 중에도 호출 입력을 계속 받을 수 있다.
+현재 구현은 진행 방향을 유지하면서 해당 방향에 있는 가장 가까운 요청을 먼저 선택한다. 진행 방향에 더 이상 요청이 없을 때만 방향을 반전한다.
 
-### SCAN 스케줄링
+```text
+UP   : current floor보다 위쪽 요청 우선
+DOWN : current floor보다 아래쪽 요청 우선
 
-처음에는 호출을 들어온 순서대로 큐에 넣어 처리했다. 그래서 올라가는
-도중에 아래층 호출이 들어오면, 위에 갈 곳이 남아있어도 순서상 아래로
-먼저 내려가는 비효율이 있었다.
+해당 방향 요청 없음
+→ 방향 반전
+→ 반대 방향 요청 처리
+```
 
-이를 진행 방향을 기준으로 처리하도록 바꿨다. 올라가는 중이면 위쪽 호출을
-순서대로 처리하고, 위에 더 이상 호출이 없을 때만 방향을 바꿔 아래쪽을
-처리한다. 실제 엘리베이터가 한 방향으로 훑고 지나가는 방식과 같다.
-pickTargetScan()이 현재 방향과 호출 위치를 보고 다음 목표 층을 정한다.
+`pickTargetScan()`이 다음 목표 층을 결정하고, 이동 중 현재 지나가는 층에 요청이 있으면 해당 층에서 정지해 요청을 처리한다.
 
-### 가감속
+### Hall Sensor 기반 층 감지
 
-가감속이 없던 처음 코드는 목표 층에 도착하면 곧바로 정지해서 급제동이
-걸렸다. 진동이 크고 안전 면에서도 좋지 않았다.
+각 층의 Hall Sensor를 이용해 현재 층을 판단한다.
+센서가 한 번 활성화됐다는 이유만으로 바로 층으로 확정하지 않고, 약 `20 ms` 동안 같은 상태가 유지되는지 확인한 뒤 유효한 층 이벤트로 처리한다.
 
-가감속을 적용하려 했지만, 일반적인 방법인 PID 기반 속도 제어는 쓸 수
-없었다. FS90R은 엔코더가 없어 현재 속도를 측정할 방법이 없고, PID는
-측정값과 목표값의 오차로 보정하는 방식이기 때문이다.
+```text
+Hall active
+→ 20 ms 상태 확인
+→ 유지됨: floor event
+→ 풀림: noise로 무시
+```
 
-그래서 측정 대신 다음과 같이 구현했다.
+### Encoder 없는 구동계의 오픈루프 가감속
 
-- 출발: 시간 기반으로 PWM을 조금씩 높여 가속한다. (오픈루프)
-- 이동: 정상 속도를 유지한다.
-- 목적지 한 층 전에서 홀 센서가 잡히면 저속으로 전환해 감속한다.
-- 목적지 홀 센서가 잡히면 정지한다.
+FS90R에는 속도 피드백용 Encoder가 없기 때문에 폐루프 PID 속도제어 대신 PWM pulse 기반 오픈루프 속도 프로파일을 사용했다.
 
-목적지가 바로 옆 층이라 가속할 거리가 없을 때는 처음부터 저속으로
-출발하게 했다. 적용 후 이전보다 운행이 부드러워졌다.
+- 출발: 목표 pulse까지 일정 step으로 ramp
+- 순항: 정상 구동 pulse 유지
+- 목표 층 한 층 전: Hall event를 기준으로 저속 pulse 전환
+- 목표 층 감지: 정지 pulse로 전환
+- 바로 옆 층이 목표인 경우: 처음부터 저속 구동
 
-한계도 있다. 한 칸씩 연속으로 정지해야 하는 경우에는 가속·감속 거리가
-부족해 효과가 떨어진다. 또한 출발 가속이 시간 기반이라, 모터 부하나
-전압이 달라지면 실제 속도가 의도와 어긋날 수 있다. 이 부분은 속도를
-측정할 수 있는 하드웨어라면 더 정밀하게 다룰 수 있을 것이다.
+`Motor_Update()`는 `20 ms` 간격으로 현재 pulse를 목표 pulse 쪽으로 조금씩 이동시킨다.
 
-### 홀 센서 디바운싱
+### Safety Logic
 
-올라가는 도중에 홀 센서가 층을 제대로 잡지 못하고 지나치는 경우가
-있었다. 신호를 한 번만 읽으면 순간적으로 놓치는 것이다.
+- **Door state interlock**: `DOOR_OPEN` 상태에서는 모터 목표를 정지로 유지
+- **Movement timeout**: 이동 중 `8 s` 안에 새로운 층 이벤트가 발생하지 않으면 `FAULT`로 전환하고 정지
+- **FAULT state**: 모터 정지 상태를 유지해 추가 이동을 차단
 
-그래서 센서가 감지되면 바로 인정하지 않고, 일정 시간(20ms) 동안 같은
-상태가 유지되는지 다시 확인한다. 그 시간 동안 신호가 유지되면 감지로
-인정하고, 중간에 풀리면 노이즈로 보고 무시한다. 이렇게 바꾼 뒤 층
-인식이 안정적으로 됐다.
+이 프로젝트의 Door 상태는 운행 상태 머신에서 사용하는 논리 상태이며 별도의 Door actuator 제어는 포함하지 않는다.
 
-### 안전 로직
+## Why not PID?
 
-- 도어 인터락: 문이 열린 동안에는 모터를 정지 상태로 묶어, 문이 열린
-  채 움직이는 상황을 막는다.
-- 타임아웃 정지: 이동을 시작한 뒤 정해진 시간 안에 다음 층을 감지하지
-  못하면 고장으로 판단해 FAULT 상태로 들어가 모터를 멈춘다.
+현재 구동계는 FS90R의 실제 속도를 측정할 Encoder가 없다. 따라서 목표속도와 측정속도의 오차를 이용하는 폐루프 PID 제어 대신, 시간 기반 PWM ramp와 Hall Sensor 이벤트를 결합한 오픈루프 제어를 사용했다.
 
-## PID를 쓰지 않은 이유
+## Limitations
 
-FS90R은 피드백 수단이 없어 속도와 위치를 측정할 수 없다. PID는 측정값과
-목표값의 오차로 보정하는 제어 방식이라 적용이 불가능했다. 그래서 측정
-대신 홀 센서 이벤트를 기준으로 동작을 전환하는 방식으로 구현했다.
+- 속도 피드백이 없어 부하나 전압 변화에 따른 실제 속도 편차를 폐루프로 보정할 수 없다.
+- 짧은 층간 이동이나 연속 중간 정지에서는 충분한 가감속 거리를 확보하기 어렵다.
+- Door는 소프트웨어 상태로만 모델링했으며 물리 Door actuator 제어는 구현 범위에 포함하지 않았다.
 
-## 아쉬운 점
+## Key Points
 
-PID 제어가 가능했다면 안전을 위한 더 세밀한 가감속을 할 수 있었을
-것이다. 하드웨어 한계 안에서 나름의 알고리즘을 짰지만, 실제 엘리베이터의
-운행과 맞지 않는 부분이 남아 있다. 특히 시간 기반 가속은 상황에 따라
-실제 속도와 어긋날 수 있다는 점이 아쉽다. 다음에는 엔코더가 달린 DC
-모터로 제대로 된 PID 제어를 구현해보고 싶다.
+- 단일 제어 흐름을 FSM 기반 상태 처리 구조로 분리
+- 이동 방향을 고려하지 않던 목표 선택을 SCAN 방식으로 개선
+- Hall Sensor event를 이용한 층 감지 및 감속/정지
+- Encoder가 없는 구동계에서 오픈루프 PWM ramp 적용
+- Door state interlock과 이동 timeout 기반 FAULT 처리
