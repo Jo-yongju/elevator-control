@@ -1,0 +1,13 @@
+# STM32CubeIDE build output
+Debug/
+Release/
+
+# Local Eclipse/CubeIDE workspace data
+.metadata/
+*.launch
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
